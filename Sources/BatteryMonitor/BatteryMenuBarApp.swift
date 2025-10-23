@@ -37,7 +37,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Create the popover
         let popover = NSPopover()
-        popover.contentSize = NSSize(width: 400, height: 600)
+        popover.contentSize = NSSize(width: 350, height: 500)
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(rootView: BatteryDetailView())
         self.popover = popover
@@ -124,7 +124,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
                     // Set tooltip
                     button.toolTip = String(format: "Battery: %.0f%%\n%@",
-                                           percentage,
+                                           Double(percentage),
                                            isCharging ? "Charging" : (isPluggedIn ? "Plugged In" : "On Battery"))
                 } else {
                     button.title = "🔋?"

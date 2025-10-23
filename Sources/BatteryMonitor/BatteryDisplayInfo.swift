@@ -351,9 +351,18 @@ struct BatteryDisplayInfo {
             info.gaugeQmax = String(format: "%d mAh (FCC: %d mAh, %.1f%% diff)", qmax, info.fullChargeCapacity, pct)
         }
 
+        // Virtual Temperature - only show if reliable
+        // Check: battery active, temp in realistic range (-20 to 80°C), reasonable diff (2-10°C)
         if let vTemp = batteryData.virtualTemperature, vTemp > 0, batteryData.temperature > 0 {
             let calc = vTemp - batteryData.temperature
-            info.virtualTemperature = String(format: "%.1f°C (calc: %+.1f°C from sensor)", vTemp, calc)
+            let isCharging = batteryData.isCharging
+            let current = abs(batteryData.amperage)
+            let batteryActive = isCharging || current > 100  // Active if charging or >100mA draw
+
+            // Only show if reliable: active battery, realistic temp, reasonable difference
+            if batteryActive && vTemp >= -20 && vTemp <= 80 && abs(calc) > 2 && abs(calc) < 10 {
+                info.virtualTemperature = String(format: "%.1f°C (calc: %+.1f°C from sensor)", vTemp, calc)
+            }
         }
 
         if let port = batteryData.bestChargerPort {

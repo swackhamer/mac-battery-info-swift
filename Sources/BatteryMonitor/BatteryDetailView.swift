@@ -142,7 +142,7 @@ struct BatteryDetailView: View {
             .padding()
             .disclosureGroupStyle(FullWidthDisclosureStyle())
         }
-        .frame(width: 500, height: 700)
+        .frame(width: 350, height: 500)
         .background(colorScheme == .dark ? Color(nsColor: .windowBackgroundColor) : Color(nsColor: .controlBackgroundColor))
     }
 
@@ -379,11 +379,15 @@ struct CapacityAnalysisSection: View {
 
     var body: some View {
         DisclosureGroup {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(info.capacityAnalysis, id: \.self) { line in
-                    Text(line)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(.secondary)
+                    if let parsed = parseCapacityLine(line) {
+                        InfoRow(label: parsed.label, value: parsed.value, valueColor: parsed.color)
+                    } else {
+                        Text(line)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             .padding(.top, 8)
@@ -397,6 +401,50 @@ struct CapacityAnalysisSection: View {
                     .fontWeight(.semibold)
             }
         }
+    }
+
+    func parseCapacityLine(_ line: String) -> (label: String, value: String, color: Color)? {
+        // Parse lines like:
+        // "Design (factory):   5088 mAh (100%)"
+        // "Nominal (rated):    5109 mAh (100.4%) [+21 mAh]"
+        // "Current Max (FCC):  4988 mAh (98.0%) [-100 mAh degradation]"
+
+        let components = line.components(separatedBy: ":").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard components.count == 2 else { return nil }
+
+        let label = components[0]
+        let value = components[1]
+
+        // Determine color based on content
+        let color: Color
+        if line.contains("Design") {
+            color = .blue
+        } else if line.contains("Nominal") {
+            color = .green
+        } else if line.contains("FCC") || line.contains("Current Max") {
+            // Color based on degradation
+            if line.contains("degradation") {
+                if line.contains("[-") {
+                    // Negative degradation (capacity loss)
+                    let degradationValue = value.components(separatedBy: "[").last?.components(separatedBy: " ").first?.replacingOccurrences(of: "[", with: "")
+                    if let deg = degradationValue, let degValue = Int(deg), degValue < -200 {
+                        color = .red
+                    } else if let deg = degradationValue, let degValue = Int(deg), degValue < -100 {
+                        color = .orange
+                    } else {
+                        color = .yellow
+                    }
+                } else {
+                    color = .green
+                }
+            } else {
+                color = .green
+            }
+        } else {
+            color = .primary
+        }
+
+        return (label: label, value: value, color: color)
     }
 }
 
@@ -674,79 +722,112 @@ struct AdvancedDiagnosticsSection: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let resistance = info.internalResistance {
                     if let quality = info.internalResistanceQuality {
-                        InfoRow(label: "Internal Resistance", value: "\(resistance) (\(quality))")
+                        DiagnosticRow(label: "Internal Resistance", value: "\(resistance) (\(quality))", valueColor: .orange)
                     } else {
-                        InfoRow(label: "Internal Resistance", value: resistance)
+                        DiagnosticRow(label: "Internal Resistance", value: resistance, valueColor: .orange)
                     }
                 }
 
                 if let qmax = info.gaugeQmax {
-                    InfoRow(label: "Gauge Measured Qmax", value: qmax)
+                    DiagnosticRow(label: "Gauge Measured Qmax", value: qmax, valueColor: .blue)
                 }
 
                 if let vTemp = info.virtualTemperature {
-                    InfoRow(label: "Virtual Temperature", value: vTemp)
+                    // Parse temperature to determine color
+                    let tempColor: Color = {
+                        if let tempString = vTemp.split(separator: "°").first,
+                           let tempValue = Double(tempString) {
+                            if tempValue < 30 { return .blue }
+                            else if tempValue < 40 { return .green }
+                            else if tempValue < 45 { return .orange }
+                            else { return .red }
+                        }
+                        return .primary
+                    }()
+                    DiagnosticRow(label: "Virtual Temperature", value: vTemp, valueColor: tempColor)
                 }
 
                 if let port = info.bestChargerPort {
-                    InfoRow(label: "Best Charger Port", value: port)
+                    DiagnosticRow(label: "Best Charger Port", value: port, valueColor: .purple)
                 }
 
                 if let status = info.gaugeStatus {
-                    InfoRow(label: "Gauge Status", value: status)
+                    DiagnosticRow(label: "Gauge Status", value: status, valueColor: .green)
                 }
 
                 if let misc = info.miscStatus {
-                    InfoRow(label: "Misc Status", value: misc)
+                    DiagnosticRow(label: "Misc Status", value: misc, valueColor: .green)
                 }
 
                 if let failure = info.permanentFailure {
-                    InfoRow(label: "Permanent Failure", value: failure)
+                    let failureColor: Color = failure.lowercased().contains("no") || failure.lowercased().contains("false") ? .green : .red
+                    DiagnosticRow(label: "Permanent Failure", value: failure, valueColor: failureColor)
                 }
 
                 if let count = info.gaugeWriteCount {
-                    InfoRow(label: "Gauge Write Count", value: "\(count)")
+                    DiagnosticRow(label: "Gauge Write Count", value: "\(count)", valueColor: .indigo)
                 }
 
                 if let soc = info.gaugeSoC {
-                    InfoRow(label: "Gauge SOC", value: soc)
+                    DiagnosticRow(label: "Gauge SOC", value: soc, valueColor: .teal)
                 }
 
                 if let range = info.dailyChargeRange {
-                    InfoRow(label: "Daily Charge Range", value: range)
+                    DiagnosticRow(label: "Daily Charge Range", value: range, valueColor: .mint)
                 }
 
                 if let shipping = info.shippingMode {
-                    InfoRow(label: "Shipping Mode", value: shipping)
+                    DiagnosticRow(label: "Shipping Mode", value: shipping, valueColor: .yellow)
                 }
 
                 if let energy = info.lifetimeEnergy {
-                    InfoRow(label: "Lifetime Energy", value: energy)
+                    DiagnosticRow(label: "Lifetime Energy", value: energy, valueColor: .orange)
                 }
 
                 if let wait = info.postChargeWait {
-                    InfoRow(label: "Post-Charge Wait", value: wait)
+                    DiagnosticRow(label: "Post-Charge Wait", value: wait, valueColor: .blue)
                 }
 
                 if let wait = info.postDischargeWait {
-                    InfoRow(label: "Post-Discharge Wait", value: wait)
+                    DiagnosticRow(label: "Post-Discharge Wait", value: wait, valueColor: .blue)
                 }
 
                 if let wake = info.invalidWakeTime {
-                    InfoRow(label: "Invalid Wake Time", value: wake)
+                    DiagnosticRow(label: "Invalid Wake Time", value: wake, valueColor: .pink)
                 }
             }
             .padding(.top, 8)
         } label: {
             HStack {
                 Image(systemName: "stethoscope")
-                    .foregroundColor(.red)
+                    .foregroundColor(.cyan)
                     .font(.system(size: sectionHeaderFontSize))
                 Text("Advanced Diagnostics")
                     .font(.system(size: sectionHeaderFontSize))
                     .fontWeight(.semibold)
             }
         }
+    }
+}
+
+// MARK: - Diagnostic Row Helper
+struct DiagnosticRow: View {
+    let label: String
+    let value: String
+    var labelColor: Color = .secondary
+    var valueColor: Color = .primary
+
+    var body: some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .foregroundColor(labelColor)
+            Spacer()
+            Text(value)
+                .fontWeight(.semibold)
+                .foregroundColor(valueColor)
+                .multilineTextAlignment(.trailing)
+        }
+        .font(.subheadline)
     }
 }
 
